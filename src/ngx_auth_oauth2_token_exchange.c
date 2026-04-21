@@ -8,8 +8,8 @@
 #include <ngx_http.h>
 
 #include "ngx_auth_oauth2_token_exchange.h"
-#include "ngx_auth_oauth2_token_json.h"
 #include "ngx_auth_oauth2_token_http.h"
+#include "nxe_json.h"
 
 
 #define NGX_AUTH_OAUTH2_TOKEN_EXCHANGE_GRANT_TYPE \
@@ -135,13 +135,21 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
     ngx_str_t *body, ngx_http_auth_oauth2_token_ctx_t *ctx,
     ngx_log_t *log)
 {
-    ngx_auth_oauth2_token_json_t *json;
+    nxe_json_t *json, *expires_in;
     ngx_str_t issued_token_type;
+    int64_t expires_in_int;
     ngx_int_t rc;
 
-    json = ngx_auth_oauth2_token_json_parse(body->data,
-                                            body->len, log);
+    json = nxe_json_parse(body, pool);
     if (json == NULL) {
+        return NGX_ERROR;
+    }
+
+    if (!nxe_json_is_object(json)) {
+        ngx_log_error(NGX_LOG_ERR, log, 0,
+                      "auth_oauth2_token: "
+                      "JSON root is not an object");
+        nxe_json_free(json);
         return NGX_ERROR;
     }
 
@@ -155,23 +163,23 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
      *   refresh_token (OPTIONAL)
      */
 
-    rc = ngx_auth_oauth2_token_json_get_string(
-        json, "access_token", pool, &ctx->new_token);
+    rc = nxe_json_object_get_string(
+        json, "access_token", &ctx->new_token, pool);
 
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, log, 0,
                       "auth_oauth2_token: "
                       "exchange response missing "
                       "\"access_token\" field");
-        ngx_auth_oauth2_token_json_free(json);
+        nxe_json_free(json);
         return NGX_ERROR;
     }
 
     /* issued_token_type (REQUIRED per RFC 8693) */
     ngx_str_null(&issued_token_type);
 
-    if (ngx_auth_oauth2_token_json_get_string(
-            json, "issued_token_type", pool, &issued_token_type)
+    if (nxe_json_object_get_string(
+            json, "issued_token_type", &issued_token_type, pool)
         != NGX_OK
         || issued_token_type.len == 0)
     {
@@ -182,8 +190,8 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
     }
 
     /* token_type (REQUIRED per RFC 8693) */
-    rc = ngx_auth_oauth2_token_json_get_string(
-        json, "token_type", pool, &ctx->new_token_type);
+    rc = nxe_json_object_get_string(
+        json, "token_type", &ctx->new_token_type, pool);
 
     if (rc != NGX_OK || ctx->new_token_type.len == 0) {
         ngx_log_error(NGX_LOG_WARN, log, 0,
@@ -204,10 +212,14 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
                       &ctx->new_token_type);
     }
 
-    ngx_auth_oauth2_token_json_get_integer(
-        json, "expires_in", &ctx->exchange_expires_in);
+    expires_in = nxe_json_object_get(json, "expires_in");
+    if (expires_in != NULL
+        && nxe_json_integer(expires_in, &expires_in_int) == NGX_OK)
+    {
+        ctx->exchange_expires_in = (time_t) expires_in_int;
+    }
 
-    ngx_auth_oauth2_token_json_free(json);
+    nxe_json_free(json);
 
     return NGX_OK;
 }

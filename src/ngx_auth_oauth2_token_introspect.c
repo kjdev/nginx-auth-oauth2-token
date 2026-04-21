@@ -8,8 +8,8 @@
 #include <ngx_http.h>
 
 #include "ngx_auth_oauth2_token_introspect.h"
-#include "ngx_auth_oauth2_token_json.h"
 #include "ngx_auth_oauth2_token_http.h"
+#include "nxe_json.h"
 
 
 ngx_int_t
@@ -61,57 +61,66 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     ngx_str_t *body, ngx_http_auth_oauth2_token_ctx_t *ctx,
     ngx_log_t *log)
 {
-    ngx_auth_oauth2_token_json_t *json;
-    ngx_int_t rc;
-    time_t exp;
+    nxe_json_t *json, *active;
+    nxe_json_t *exp_value;
+    ngx_flag_t active_flag;
+    int64_t exp_int;
 
-    json = ngx_auth_oauth2_token_json_parse(body->data,
-                                            body->len, log);
+    json = nxe_json_parse(body, pool);
     if (json == NULL) {
         return NGX_ERROR;
     }
 
+    if (!nxe_json_is_object(json)) {
+        ngx_log_error(NGX_LOG_ERR, log, 0,
+                      "auth_oauth2_token: "
+                      "JSON root is not an object");
+        nxe_json_free(json);
+        return NGX_ERROR;
+    }
+
     /* "active" field is REQUIRED per RFC 7662 */
-    rc = ngx_auth_oauth2_token_json_get_bool(json, "active");
-    if (rc == NGX_DECLINED || rc == NGX_ERROR) {
+    active = nxe_json_object_get(json, "active");
+    if (active == NULL
+        || nxe_json_boolean(active, &active_flag) != NGX_OK)
+    {
         ngx_log_error(NGX_LOG_ERR, log, 0,
                       "auth_oauth2_token: "
                       "introspection response missing "
                       "\"active\" field");
-        ngx_auth_oauth2_token_json_free(json);
+        nxe_json_free(json);
         return NGX_ERROR;
     }
 
-    ctx->active = (rc == 1) ? 1 : 0;
+    ctx->active = active_flag ? 1 : 0;
 
     if (!ctx->active) {
-        ngx_auth_oauth2_token_json_free(json);
+        nxe_json_free(json);
         return NGX_OK;
     }
 
     /* extract optional fields */
 
-    ngx_auth_oauth2_token_json_get_string(json, "sub",
-                                          pool, &ctx->sub);
+    nxe_json_object_get_string(json, "sub", &ctx->sub, pool);
 
-    ngx_auth_oauth2_token_json_get_string(json, "scope",
-                                          pool, &ctx->scope);
+    nxe_json_object_get_string(json, "scope", &ctx->scope, pool);
 
-    ngx_auth_oauth2_token_json_get_string(json, "client_id",
-                                          pool, &ctx->client_id);
+    nxe_json_object_get_string(json, "client_id",
+                               &ctx->client_id, pool);
 
-    if (ngx_auth_oauth2_token_json_get_integer(json, "exp",
-                                               &exp)
-        == NGX_OK)
+    exp_value = nxe_json_object_get(json, "exp");
+    if (exp_value != NULL
+        && nxe_json_integer(exp_value, &exp_int) == NGX_OK)
     {
         ctx->exp.data = ngx_pnalloc(pool, NGX_TIME_T_LEN);
         if (ctx->exp.data != NULL) {
-            ctx->exp.len = ngx_sprintf(ctx->exp.data, "%T", exp)
+            ctx->exp.len = ngx_sprintf(ctx->exp.data, "%T",
+                                       (time_t) exp_int)
                            - ctx->exp.data;
         }
     }
 
-    ngx_auth_oauth2_token_json_free(json);
+    nxe_json_free(json);
 
     return NGX_OK;
 }

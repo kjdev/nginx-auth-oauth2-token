@@ -8,7 +8,7 @@
 #include <ngx_http.h>
 
 #include "ngx_auth_oauth2_token_http.h"
-#include "ngx_auth_oauth2_token_json.h"
+#include "nxe_json.h"
 
 
 typedef struct {
@@ -150,7 +150,7 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
         }
 
         if (len > 0) {
-            if (len > NGX_AUTH_OAUTH2_TOKEN_JSON_MAX_SIZE) {
+            if (len > NXE_JSON_MAX_SIZE) {
                 ngx_log_error(NGX_LOG_ERR, log, 0,
                               "auth_oauth2_token: "
                               "response too large: %uz", len);
@@ -183,7 +183,7 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
         if (b->pos && b->last > b->pos) {
             len = b->last - b->pos;
 
-            if (len > NGX_AUTH_OAUTH2_TOKEN_JSON_MAX_SIZE) {
+            if (len > NXE_JSON_MAX_SIZE) {
                 ngx_log_error(NGX_LOG_ERR, log, 0,
                               "auth_oauth2_token: "
                               "response too large: %uz", len);
@@ -206,7 +206,7 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
             }
 
             if (len > 0) {
-                if (len > NGX_AUTH_OAUTH2_TOKEN_JSON_MAX_SIZE) {
+                if (len > NXE_JSON_MAX_SIZE) {
                     ngx_log_error(NGX_LOG_ERR, log, 0,
                                   "auth_oauth2_token: "
                                   "response too large: %uz", len);
