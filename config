@@ -1,24 +1,38 @@
 ngx_addon_name=ngx_http_auth_oauth2_token_module
 
+# --- submodule: nxe-json ---
+nxe_json_dir="$ngx_addon_dir/nxe-json"
+
+if [ ! -f "$nxe_json_dir/config.ngx" ]; then
+    echo "$0: error: $nxe_json_dir/config.ngx not found" >&2
+    exit 1
+fi
+
+. "$nxe_json_dir/config.ngx"
+
+# --- module definition ---
 ngx_module_type=HTTP
 ngx_module_name="ngx_http_auth_oauth2_token_module"
 ngx_module_deps="\
+  $nxe_json_module_deps \
   $ngx_addon_dir/src/ngx_http_auth_oauth2_token_module.h \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_introspect.h \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_exchange.h \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_http.h \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_cache.h \
-  $ngx_addon_dir/src/ngx_auth_oauth2_token_json.h \
 "
-ngx_module_incs="$ngx_addon_dir/src"
+ngx_module_incs="\
+  $nxe_json_module_incs \
+  $ngx_addon_dir/src \
+"
 ngx_module_srcs="\
+  $nxe_json_module_srcs \
   $ngx_addon_dir/src/ngx_http_auth_oauth2_token_module.c \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_introspect.c \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_exchange.c \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_http.c \
   $ngx_addon_dir/src/ngx_auth_oauth2_token_cache.c \
-  $ngx_addon_dir/src/ngx_auth_oauth2_token_json.c \
 "
-ngx_module_libs="-ljansson"
+ngx_module_libs="$nxe_json_module_libs"
 
 . auto/module
