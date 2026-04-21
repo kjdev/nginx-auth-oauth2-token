@@ -1,5 +1,28 @@
 # Changelog
 
+## [0ee1506](../../commit/0ee1506) - 2026-04-21
+
+### Security
+
+- Parse IdP responses with `nxe_json_parse_untrusted()`
+  - Apply structural limits (depth / array size / string length / object key count) to network-sourced JSON
+  - Harden against structural DoS from a malicious or compromised IdP
+
+## [1953cfb](../../commit/1953cfb) - 2026-04-21
+
+### Changed
+
+- Replace in-tree JSON handling with the `nxe_json_*` API
+  - Remove the bundled `src/ngx_auth_oauth2_token_json.{c,h}`
+  - Raise the IdP response size cap from 64 KiB to 1 MiB
+
+## [718a2bd](../../commit/718a2bd) - 2026-04-21
+
+### Added
+
+- Add the `nxe-json` submodule (v0.1.0, `https://github.com/kjdev/nxe-json`)
+  - `git submodule update --init` is required before building
+
 ## [4e6a5ae](../../commit/4e6a5ae) - 2026-04-02
 
 ### Added
