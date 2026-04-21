@@ -66,7 +66,7 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     ngx_flag_t active_flag;
     int64_t exp_int;
 
-    json = nxe_json_parse(body, pool);
+    json = nxe_json_parse_untrusted(body, pool);
     if (json == NULL) {
         return NGX_ERROR;
     }

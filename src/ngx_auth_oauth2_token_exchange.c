@@ -140,7 +140,7 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
     int64_t expires_in_int;
     ngx_int_t rc;
 
-    json = nxe_json_parse(body, pool);
+    json = nxe_json_parse_untrusted(body, pool);
     if (json == NULL) {
         return NGX_ERROR;
     }
