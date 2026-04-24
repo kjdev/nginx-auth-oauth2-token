@@ -135,7 +135,7 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
     ngx_str_t *body, ngx_http_auth_oauth2_token_ctx_t *ctx,
     ngx_log_t *log)
 {
-    nxe_json_t *json, *expires_in;
+    nxe_json_t *json;
     ngx_str_t issued_token_type;
     int64_t expires_in_int;
     ngx_int_t rc;
@@ -212,9 +212,8 @@ ngx_auth_oauth2_token_exchange_parse_response(ngx_pool_t *pool,
                       &ctx->new_token_type);
     }
 
-    expires_in = nxe_json_object_get(json, "expires_in");
-    if (expires_in != NULL
-        && nxe_json_integer(expires_in, &expires_in_int) == NGX_OK)
+    if (nxe_json_object_get_integer(json, "expires_in", &expires_in_int)
+        == NGX_OK)
     {
         ctx->exchange_expires_in = (time_t) expires_in_int;
     }

@@ -61,8 +61,7 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     ngx_str_t *body, ngx_http_auth_oauth2_token_ctx_t *ctx,
     ngx_log_t *log)
 {
-    nxe_json_t *json, *active;
-    nxe_json_t *exp_value;
+    nxe_json_t *json;
     ngx_flag_t active_flag;
     int64_t exp_int;
 
@@ -80,9 +79,8 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     }
 
     /* "active" field is REQUIRED per RFC 7662 */
-    active = nxe_json_object_get(json, "active");
-    if (active == NULL
-        || nxe_json_boolean(active, &active_flag) != NGX_OK)
+    if (nxe_json_object_get_boolean(json, "active", &active_flag)
+        != NGX_OK)
     {
         ngx_log_error(NGX_LOG_ERR, log, 0,
                       "auth_oauth2_token: "
@@ -108,10 +106,7 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     nxe_json_object_get_string(json, "client_id",
                                &ctx->client_id, pool);
 
-    exp_value = nxe_json_object_get(json, "exp");
-    if (exp_value != NULL
-        && nxe_json_integer(exp_value, &exp_int) == NGX_OK)
-    {
+    if (nxe_json_object_get_integer(json, "exp", &exp_int) == NGX_OK) {
         ctx->exp.data = ngx_pnalloc(pool, NGX_TIME_T_LEN);
         if (ctx->exp.data != NULL) {
             ctx->exp.len = ngx_sprintf(ctx->exp.data, "%T",
