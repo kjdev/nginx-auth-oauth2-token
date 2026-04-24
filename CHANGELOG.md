@@ -1,5 +1,22 @@
 # Changelog
 
+## [d291fac](../../commit/d291fac) - 2026-04-24
+
+### Changed
+
+- Replace 2-step typed-field extraction on IdP responses with `nxe_json_object_get_integer` / `nxe_json_object_get_boolean`
+  - Introspection response `active` / `exp`
+  - Token Exchange response `expires_in`
+  - Drops the intermediate `nxe_json_t *` locals and shortens each call site to a single condition
+
+## [217687f](../../commit/217687f) - 2026-04-24
+
+### Changed
+
+- Bump the `nxe-json` submodule to 0.2.0
+  - Add `nxe_json_object_get_integer` / `nxe_json_object_get_boolean` helpers
+  - Zero-clear extractor out-params on failure as a defensive safeguard
+
 ## [0ee1506](../../commit/0ee1506) - 2026-04-21
 
 ### Security
