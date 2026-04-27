@@ -8,7 +8,6 @@
 #include <ngx_http.h>
 
 #include "ngx_auth_oauth2_token_http.h"
-#include "nxe_json.h"
 
 
 typedef struct {
@@ -146,17 +145,19 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
         for (cl = r->out; cl; cl = cl->next) {
             if (cl->buf) {
                 len += ngx_buf_size(cl->buf);
+
+                if (len
+                    > NGX_AUTH_OAUTH2_TOKEN_HTTP_RESPONSE_MAX_SIZE)
+                {
+                    ngx_log_error(NGX_LOG_ERR, log, 0,
+                                  "auth_oauth2_token: "
+                                  "response too large: %uz", len);
+                    return NGX_ERROR;
+                }
             }
         }
 
         if (len > 0) {
-            if (len > NXE_JSON_MAX_SIZE) {
-                ngx_log_error(NGX_LOG_ERR, log, 0,
-                              "auth_oauth2_token: "
-                              "response too large: %uz", len);
-                return NGX_ERROR;
-            }
-
             body->data = ngx_pnalloc(r->pool, len);
             if (body->data == NULL) {
                 return NGX_ERROR;
@@ -183,7 +184,7 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
         if (b->pos && b->last > b->pos) {
             len = b->last - b->pos;
 
-            if (len > NXE_JSON_MAX_SIZE) {
+            if (len > NGX_AUTH_OAUTH2_TOKEN_HTTP_RESPONSE_MAX_SIZE) {
                 ngx_log_error(NGX_LOG_ERR, log, 0,
                               "auth_oauth2_token: "
                               "response too large: %uz", len);
@@ -202,17 +203,20 @@ ngx_auth_oauth2_token_http_response_body(ngx_http_request_t *r,
             for (cl = r->upstream->out_bufs; cl; cl = cl->next) {
                 if (cl->buf && ngx_buf_size(cl->buf) > 0) {
                     len += ngx_buf_size(cl->buf);
+
+                    if (len
+                        > NGX_AUTH_OAUTH2_TOKEN_HTTP_RESPONSE_MAX_SIZE)
+                    {
+                        ngx_log_error(NGX_LOG_ERR, log, 0,
+                                      "auth_oauth2_token: "
+                                      "response too large: %uz",
+                                      len);
+                        return NGX_ERROR;
+                    }
                 }
             }
 
             if (len > 0) {
-                if (len > NXE_JSON_MAX_SIZE) {
-                    ngx_log_error(NGX_LOG_ERR, log, 0,
-                                  "auth_oauth2_token: "
-                                  "response too large: %uz", len);
-                    return NGX_ERROR;
-                }
-
                 body->data = ngx_pnalloc(r->pool, len);
                 if (body->data == NULL) {
                     return NGX_ERROR;
