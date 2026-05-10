@@ -1,5 +1,15 @@
 # Changelog
 
+## [ec3a924](../../commit/ec3a924) - 2026-04-27
+
+### Security
+
+- Tighten the IdP response size cap from 1 MiB back down to 64 KiB
+  - Replace the direct use of `nxe-json`'s `NXE_JSON_MAX_SIZE` (1 MiB) with the module-defined `NGX_AUTH_OAUTH2_TOKEN_HTTP_RESPONSE_MAX_SIZE` (64 KiB)
+  - RFC 7662 / RFC 8693 responses are typically a few KiB, so the previous cap left an unnecessarily large memory amplification surface
+  - Short-circuit during chain traversal in `ngx_auth_oauth2_token_http_response_body()` so oversize responses are rejected before allocating and copying into a request-pool buffer
+  - Drop the `nxe_json.h` include from `http.c`, which was only kept for the size constant
+
 ## [d291fac](../../commit/d291fac) - 2026-04-24
 
 ### Changed
