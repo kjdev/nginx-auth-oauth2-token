@@ -13,6 +13,7 @@ Reference for directives and embedded variables provided by `ngx_http_auth_oauth
 | [auth_oauth2_token_introspect](#auth_oauth2_token_introspect) | Enable/disable Introspection | http, server, location |
 | [auth_oauth2_token_introspect_endpoint](#auth_oauth2_token_introspect_endpoint) | Introspection endpoint URI | http, server, location |
 | [auth_oauth2_token_introspect_cache](#auth_oauth2_token_introspect_cache) | Introspection cache settings | http, server, location |
+| [auth_oauth2_token_claim_set](#auth_oauth2_token_claim_set) | Bind an arbitrary Introspection response claim to a variable | http |
 | [auth_oauth2_token_exchange](#auth_oauth2_token_exchange) | Enable/disable Exchange | http, server, location |
 | [auth_oauth2_token_token_endpoint](#auth_oauth2_token_token_endpoint) | Token endpoint URI | http, server, location |
 | [auth_oauth2_token_audience](#auth_oauth2_token_audience) | Exchange target audience | http, server, location |
@@ -127,6 +128,58 @@ auth_oauth2_token_introspect_cache zone=introspect:10m max_ttl=60s;
 
 > **Note**: Without cache configuration, an Introspection subrequest is issued to the IdP for every incoming request. Cache configuration is recommended for production. See [SECURITY.md](SECURITY.md) for security trade-offs of caching.
 
+#### auth_oauth2_token_claim_set
+
+```
+Syntax:  auth_oauth2_token_claim_set $variable claim_name;
+Default: ---
+Context: http
+```
+
+Binds an arbitrary field (`claim_name`) from the Introspection response JSON to the nginx variable `$variable`. Symmetric API to `auth_jwt_claim_set`.
+
+Reference the variable from places that are evaluated at or after the ACCESS phase, such as `proxy_set_header` for upstream forwarding, `add_header` for response headers, and `log_format` for access logs. Typical use cases include `aud` validation for MCP Resource Servers ([RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707)) and other claims not covered by the built-in variables.
+
+**Variable value rules**:
+
+| JSON type | Variable value |
+|---|---|
+| string | Raw string (no surrounding quotes) |
+| array | Each element formatted recursively and joined with `,`. Elements that themselves contain a comma become indistinguishable; treat the claim as an object when structure must be preserved. |
+| integer / real / boolean / null / object | Compact JSON representation (`nxe_json_stringify_compact`) |
+
+**Conditions under which the variable is undefined**:
+
+- The field is absent from the Introspection response
+- Introspection has not run, errored, or returned `active: false`
+
+```nginx
+http {
+    auth_oauth2_token_claim_set $oauth2_aud   aud;
+    auth_oauth2_token_claim_set $oauth2_scope scope;
+
+    log_format oauth2 '$remote_addr $oauth2_token_sub '
+                      'aud=$oauth2_aud scope=$oauth2_scope';
+
+    server {
+        location /mcp {
+            auth_oauth2_token_introspect          on;
+            auth_oauth2_token_introspect_endpoint /_introspect;
+
+            access_log /var/log/nginx/oauth2.log oauth2;
+
+            proxy_set_header X-OAuth2-Aud   $oauth2_aud;
+            proxy_set_header X-OAuth2-Scope $oauth2_scope;
+            proxy_pass http://mcp_backend;
+        }
+    }
+}
+```
+
+> **Note**: Variable registration (`ngx_http_add_variable`) happens during directive parsing, so the directive may only be declared in the `http` block. Referencing the variable from `server` / `location` is still permitted.
+
+> **Note**: The variable value depends on the Introspection result populated during the ACCESS phase. References from `if` directives in the REWRITE phase run before introspection and will see `not_found`, so they cannot be used for access control. Use the built-in Bearer-token validation enabled by `auth_oauth2_token_introspect on;` (or the `auth_request` module) for access control, and reference the claim variable from `proxy_set_header` / `add_header` / `log_format`, which evaluate at or after the ACCESS phase.
+
 ### Token Exchange
 
 Exchanges Bearer Tokens for new tokens with reduced scope ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693)).
@@ -222,6 +275,8 @@ auth_oauth2_token_exchange_cache zone=exchange:10m max_ttl=300s;
 ## Embedded Variables
 
 nginx variables provided by the module. Can be used with `proxy_set_header`, `add_header`, `log_format`, etc.
+
+Claims not exposed by built-in variables can be bound to arbitrary variables with [`auth_oauth2_token_claim_set`](#auth_oauth2_token_claim_set).
 
 | Variable | Description |
 |---|---|
