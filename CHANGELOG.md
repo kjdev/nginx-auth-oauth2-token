@@ -1,5 +1,15 @@
 # Changelog
 
+## [c23840d](../../commit/c23840d) - 2026-05-21
+
+### Added
+
+- Add the `auth_oauth2_token_claim_set` directive
+  - Binds an arbitrary JSON field from the Introspection response to a nginx variable
+  - Strings are emitted verbatim, arrays are comma-joined, and other types (numbers, booleans, null, objects) are rendered as their compact JSON representation
+  - Useful for claims not covered by built-in variables, e.g. audience binding on MCP Resource Servers ([RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707))
+  - The parsed JSON is retained for the request lifetime via pool cleanup, so cache-hit paths also reconstruct the variable
+
 ## [ec3a924](../../commit/ec3a924) - 2026-04-27
 
 ### Security
