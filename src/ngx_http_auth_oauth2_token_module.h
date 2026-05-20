@@ -10,6 +10,8 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+#include "nxe_json.h"
+
 
 typedef struct {
     ngx_str_t  client_id;
@@ -39,33 +41,36 @@ typedef struct {
 
 typedef struct {
     /* bearer token from Authorization header */
-    ngx_str_t  token;
+    ngx_str_t   token;
 
     /* introspection results */
-    unsigned   introspect_sent:1;
-    unsigned   introspect_done:1;
-    unsigned   introspect_error:1;
-    unsigned   active:1;
-    ngx_str_t  sub;
-    ngx_str_t  scope;
-    ngx_str_t  client_id;
-    ngx_str_t  exp;
+    unsigned    introspect_sent:1;
+    unsigned    introspect_done:1;
+    unsigned    introspect_error:1;
+    unsigned    active:1;
+    ngx_str_t   sub;
+    ngx_str_t   scope;
+    ngx_str_t   client_id;
+    ngx_str_t   exp;
 
     /* exchange results */
-    unsigned   exchange_sent:1;
-    unsigned   exchange_done:1;
-    ngx_str_t  new_token;
-    ngx_str_t  new_token_type;
-    time_t     exchange_expires_in;
+    unsigned    exchange_sent:1;
+    unsigned    exchange_done:1;
+    ngx_str_t   new_token;
+    ngx_str_t   new_token_type;
+    time_t      exchange_expires_in;
 
     /* cache state */
-    unsigned   introspect_from_cache:1;
-    unsigned   exchange_from_cache:1;
-    ngx_str_t  introspect_response;
-    ngx_str_t  exchange_response;
+    unsigned    introspect_from_cache:1;
+    unsigned    exchange_from_cache:1;
+    ngx_str_t   introspect_response;
+    ngx_str_t   exchange_response;
+
+    /* full introspection JSON for claim_set variables */
+    nxe_json_t *introspection_json;
 
     /* subrequest status */
-    ngx_int_t  subrequest_status;
+    ngx_int_t   subrequest_status;
 } ngx_http_auth_oauth2_token_ctx_t;
 
 

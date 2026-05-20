@@ -12,6 +12,13 @@
 #include "nxe_json.h"
 
 
+static void
+ngx_auth_oauth2_token_introspect_json_cleanup(void *data)
+{
+    nxe_json_free((nxe_json_t *) data);
+}
+
+
 ngx_int_t
 ngx_auth_oauth2_token_introspect_build_body(ngx_pool_t *pool,
     ngx_str_t *token, ngx_str_t *body)
@@ -64,6 +71,7 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
     nxe_json_t *json;
     ngx_flag_t active_flag;
     int64_t exp_int;
+    ngx_pool_cleanup_t *cln;
 
     json = nxe_json_parse_untrusted(body, pool);
     if (json == NULL) {
@@ -115,7 +123,19 @@ ngx_auth_oauth2_token_introspect_parse_response(ngx_pool_t *pool,
         }
     }
 
-    nxe_json_free(json);
+    /*
+     * Retain parsed JSON in ctx so claim_set variable getters can
+     * extract arbitrary claims later in the request lifecycle.
+     * Freed via pool cleanup when the request ends.
+     */
+    cln = ngx_pool_cleanup_add(pool, 0);
+    if (cln == NULL) {
+        nxe_json_free(json);
+        return NGX_ERROR;
+    }
+    cln->handler = ngx_auth_oauth2_token_introspect_json_cleanup;
+    cln->data = json;
+    ctx->introspection_json = json;
 
     return NGX_OK;
 }

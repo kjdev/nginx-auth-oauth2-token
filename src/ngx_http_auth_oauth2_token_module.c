@@ -42,6 +42,13 @@ static char *ngx_http_auth_oauth2_token_client_secret_file(
 static char *ngx_http_auth_oauth2_token_cache_conf(
     ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
+static char *ngx_http_auth_oauth2_token_conf_set_claim(
+    ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
+static ngx_int_t ngx_http_auth_oauth2_token_variable_claim(
+    ngx_http_request_t *r, ngx_http_variable_value_t *v,
+    uintptr_t data);
+
 static ngx_int_t ngx_http_auth_oauth2_token_variable_active(
     ngx_http_request_t *r, ngx_http_variable_value_t *v,
     uintptr_t data);
@@ -163,6 +170,13 @@ static ngx_command_t ngx_http_auth_oauth2_token_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_auth_oauth2_token_loc_conf_t,
                exchange_cache),
+      NULL },
+
+    { ngx_string("auth_oauth2_token_claim_set"),
+      NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE2,
+      ngx_http_auth_oauth2_token_conf_set_claim,
+      0,
+      0,
       NULL },
 
     ngx_null_command
@@ -1229,4 +1243,220 @@ ngx_http_auth_oauth2_token_cache_conf(ngx_conf_t *cf,
     }
 
     return NGX_CONF_OK;
+}
+
+
+/*
+ * Parse: auth_oauth2_token_claim_set $variable claim_name;
+ *
+ * Registers $variable as a runtime variable whose get_handler reads
+ * the named claim out of the retained introspection JSON.
+ */
+
+static char *
+ngx_http_auth_oauth2_token_conf_set_claim(ngx_conf_t *cf,
+    ngx_command_t *cmd, void *conf)
+{
+    ngx_str_t *value, var_name, *claim_name;
+    ngx_http_variable_t *var;
+
+    value = cf->args->elts;
+
+    if (value[1].len < 2 || value[1].data[0] != '$') {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "invalid variable name \"%V\"",
+                           &value[1]);
+        return NGX_CONF_ERROR;
+    }
+
+    var_name.data = value[1].data + 1;
+    var_name.len = value[1].len - 1;
+
+    if (value[2].len == 0) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "empty claim name");
+        return NGX_CONF_ERROR;
+    }
+
+    claim_name = ngx_palloc(cf->pool, sizeof(ngx_str_t));
+    if (claim_name == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    claim_name->data = ngx_pnalloc(cf->pool, value[2].len);
+    if (claim_name->data == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ngx_memcpy(claim_name->data, value[2].data, value[2].len);
+    claim_name->len = value[2].len;
+
+    /*
+     * NOCACHEABLE: the result depends on transient ctx state set during
+     * ACCESS phase.  Without this flag, a REWRITE-phase reference
+     * (e.g. `if`, `map` chained from `if`) would cache "not_found"
+     * before introspection runs and the value would never refresh.
+     */
+    var = ngx_http_add_variable(cf, &var_name,
+                                NGX_HTTP_VAR_CHANGEABLE
+                                | NGX_HTTP_VAR_NOCACHEABLE);
+    if (var == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    var->get_handler = ngx_http_auth_oauth2_token_variable_claim;
+    var->data = (uintptr_t) claim_name;
+
+    return NGX_CONF_OK;
+}
+
+
+/*
+ * Format a JSON value as a flat nginx variable string.
+ *
+ *   string  -> raw value (no surrounding quotes)
+ *   array   -> elements formatted recursively, joined with ','
+ *   other   -> nxe_json_stringify_compact() (JSON literal form)
+ *
+ * Returns NGX_OK with *out populated, NGX_ERROR on allocation failure.
+ */
+
+static ngx_int_t
+ngx_http_auth_oauth2_token_format_claim(ngx_pool_t *pool,
+    nxe_json_t *node, ngx_str_t *out)
+{
+    ngx_str_t s, *str, *parts;
+    size_t i, n, total;
+    nxe_json_t *el;
+    u_char *p;
+
+    if (nxe_json_is_string(node)) {
+        if (nxe_json_string(node, &s) != NGX_OK) {
+            out->data = NULL;
+            out->len = 0;
+            return NGX_OK;
+        }
+
+        if (s.len == 0) {
+            out->data = NULL;
+            out->len = 0;
+            return NGX_OK;
+        }
+
+        out->data = ngx_pnalloc(pool, s.len);
+        if (out->data == NULL) {
+            return NGX_ERROR;
+        }
+
+        ngx_memcpy(out->data, s.data, s.len);
+        out->len = s.len;
+        return NGX_OK;
+    }
+
+    if (nxe_json_is_array(node)) {
+        n = nxe_json_array_size(node);
+
+        if (n == 0) {
+            out->data = NULL;
+            out->len = 0;
+            return NGX_OK;
+        }
+
+        parts = ngx_pcalloc(pool, sizeof(ngx_str_t) * n);
+        if (parts == NULL) {
+            return NGX_ERROR;
+        }
+
+        total = 0;
+
+        for (i = 0; i < n; i++) {
+            el = nxe_json_array_get(node, i);
+            if (el == NULL) {
+                /* leave parts[i] zero-initialised */
+                continue;
+            }
+
+            if (ngx_http_auth_oauth2_token_format_claim(
+                    pool, el, &parts[i]) != NGX_OK)
+            {
+                return NGX_ERROR;
+            }
+
+            total += parts[i].len;
+        }
+
+        total += (n - 1);   /* separators (n >= 1 here) */
+
+        out->data = ngx_pnalloc(pool, total);
+        if (out->data == NULL) {
+            return NGX_ERROR;
+        }
+
+        p = out->data;
+
+        for (i = 0; i < n; i++) {
+            if (i > 0) {
+                *p++ = ',';
+            }
+            if (parts[i].len > 0) {
+                ngx_memcpy(p, parts[i].data, parts[i].len);
+                p += parts[i].len;
+            }
+        }
+
+        out->len = p - out->data;
+        return NGX_OK;
+    }
+
+    /* number / boolean / null / object -> JSON literal form */
+    str = nxe_json_stringify_compact(node, pool);
+    if (str == NULL) {
+        return NGX_ERROR;
+    }
+
+    *out = *str;
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_auth_oauth2_token_variable_claim(ngx_http_request_t *r,
+    ngx_http_variable_value_t *v, uintptr_t data)
+{
+    ngx_http_auth_oauth2_token_ctx_t *ctx;
+    ngx_str_t *claim_name, value;
+    nxe_json_t *node;
+
+    claim_name = (ngx_str_t *) data;
+
+    ctx = ngx_http_get_module_ctx(r,
+                                  ngx_http_auth_oauth2_token_module);
+
+    if (ctx == NULL || !ctx->introspect_done || ctx->introspect_error
+        || !ctx->active || ctx->introspection_json == NULL)
+    {
+        v->not_found = 1;
+        return NGX_OK;
+    }
+
+    node = nxe_json_object_get_ns(ctx->introspection_json,
+                                  claim_name);
+    if (node == NULL) {
+        v->not_found = 1;
+        return NGX_OK;
+    }
+
+    if (ngx_http_auth_oauth2_token_format_claim(r->pool, node, &value)
+        != NGX_OK)
+    {
+        return NGX_ERROR;
+    }
+
+    v->data = value.data;
+    v->len = value.len;
+    v->valid = 1;
+    v->no_cacheable = 0;
+    v->not_found = 0;
+
+    return NGX_OK;
 }
