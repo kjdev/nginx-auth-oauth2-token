@@ -1,5 +1,13 @@
 # Changelog
 
+## [42a4813](../../commit/42a4813) - 2026-05-21
+
+### Fixed
+
+- Skip `auth_oauth2_token_require` when introspection is disabled
+  - In exchange-only mode (`introspect=off, exchange=on`) the require block ran with no introspection result, so `auth_oauth2_token_claim_set`-derived variables were empty and even valid tokens were rejected with 401/403
+  - Guard the require evaluation with `lcf->introspect` so it only runs after a successful Introspection (`active: true`), matching the documented contract
+
 ## [0a7ceab](../../commit/0a7ceab) - 2026-05-21
 
 ### Added
