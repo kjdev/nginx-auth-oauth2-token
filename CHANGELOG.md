@@ -1,5 +1,13 @@
 # Changelog
 
+## [0e5ef93](../../commit/0e5ef93) - 2026-05-21
+
+### Fixed
+
+- Scope `auth_oauth2_token_require` `error=` per directive
+  - The error code was previously stored as a single location-wide value, so multiple directives in the same scope overwrote each other and a default-401 directive could return 403 because a later directive specified `error=403`
+  - Each directive now carries its own error code, so multiple directives can reject with independent statuses (e.g. audience mismatch → 401, missing scope → 403)
+
 ## [42a4813](../../commit/42a4813) - 2026-05-21
 
 ### Fixed
