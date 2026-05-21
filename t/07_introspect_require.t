@@ -402,3 +402,49 @@ Authorization: Bearer tok_exchange_only_require
 --- error_code: 200
 --- response_headers
 X-Received-Auth: Bearer new_exchanged_token_xyz
+
+
+=== TEST 16: default 401 directive failing returns 401 even when a later directive specifies error=403
+--- config
+    location = /_introspect {
+        internal;
+        proxy_pass http://127.0.0.1:1985/introspect/wrong_aud;
+    }
+
+    location /test {
+        auth_oauth2_token_introspect          on;
+        auth_oauth2_token_introspect_endpoint /_introspect;
+
+        auth_oauth2_token_require $mcp_aud_ok;
+        auth_oauth2_token_require $mcp_has_required_scope error=403;
+
+        proxy_pass http://127.0.0.1:1986/;
+    }
+--- request
+GET /test
+--- more_headers
+Authorization: Bearer tok_wrong_aud_per_dir
+--- error_code: 401
+
+
+=== TEST 17: default 401 directive failing returns 401 even when an earlier directive specifies error=403
+--- config
+    location = /_introspect {
+        internal;
+        proxy_pass http://127.0.0.1:1985/introspect/wrong_aud;
+    }
+
+    location /test {
+        auth_oauth2_token_introspect          on;
+        auth_oauth2_token_introspect_endpoint /_introspect;
+
+        auth_oauth2_token_require $mcp_has_required_scope error=403;
+        auth_oauth2_token_require $mcp_aud_ok;
+
+        proxy_pass http://127.0.0.1:1986/;
+    }
+--- request
+GET /test
+--- more_headers
+Authorization: Bearer tok_wrong_aud_per_dir_swapped
+--- error_code: 401
