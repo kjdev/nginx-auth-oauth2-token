@@ -198,6 +198,7 @@ Multiple variables may be passed on a single directive (space-separated), and mu
 - Status code returned on rejection (default `401`)
 - Allowed range: `400-599`, excluding `444` and `499` (same validation as `auth_jwt_require`)
 - Any out-of-range code causes a config error at nginx startup
+- Scoped to the directive that specifies it. When several `auth_oauth2_token_require` directives appear in the same scope, only the variables of the directive carrying `error=` return that status; the default 401 of other directives is not overwritten. This lets you express the MCP Authorization pattern (audience mismatch → 401, missing scope → 403) by listing both directives in the same location
 
 The module does not attach a `WWW-Authenticate` header or other rejection-response details. Use `error_page` and `add_header` to control the response on the caller side.
 
