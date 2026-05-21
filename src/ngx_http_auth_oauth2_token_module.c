@@ -680,12 +680,15 @@ exchange:
     /*
      * Phase 1.5: require checks
      *
-     * Evaluated once introspection (if enabled) has succeeded and
-     * active=true.  All complex values must yield a non-empty value
-     * other than "0".
+     * Evaluated only when introspection is enabled, after it has
+     * succeeded and active=true.  Skipped in exchange-only mode where
+     * introspection-derived variables would be empty and lead to
+     * spurious rejections.  All complex values must yield a non-empty
+     * value other than "0".
      */
 
-    if (lcf->require_values != NULL
+    if (lcf->introspect
+        && lcf->require_values != NULL
         && lcf->require_values->nelts > 0)
     {
         rc = ngx_http_auth_oauth2_token_validate_require(r, lcf);
