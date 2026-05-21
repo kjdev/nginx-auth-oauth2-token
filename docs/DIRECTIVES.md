@@ -14,6 +14,7 @@ Reference for directives and embedded variables provided by `ngx_http_auth_oauth
 | [auth_oauth2_token_introspect_endpoint](#auth_oauth2_token_introspect_endpoint) | Introspection endpoint URI | http, server, location |
 | [auth_oauth2_token_introspect_cache](#auth_oauth2_token_introspect_cache) | Introspection cache settings | http, server, location |
 | [auth_oauth2_token_claim_set](#auth_oauth2_token_claim_set) | Bind an arbitrary Introspection response claim to a variable | http |
+| [auth_oauth2_token_require](#auth_oauth2_token_require) | Additional validation after Introspection | http, server, location, limit_except |
 | [auth_oauth2_token_exchange](#auth_oauth2_token_exchange) | Enable/disable Exchange | http, server, location |
 | [auth_oauth2_token_token_endpoint](#auth_oauth2_token_token_endpoint) | Token endpoint URI | http, server, location |
 | [auth_oauth2_token_audience](#auth_oauth2_token_audience) | Exchange target audience | http, server, location |
@@ -179,6 +180,64 @@ http {
 > **Note**: Variable registration (`ngx_http_add_variable`) happens during directive parsing, so the directive may only be declared in the `http` block. Referencing the variable from `server` / `location` is still permitted.
 
 > **Note**: The variable value depends on the Introspection result populated during the ACCESS phase. References from `if` directives in the REWRITE phase run before introspection and will see `not_found`, so they cannot be used for access control. Use the built-in Bearer-token validation enabled by `auth_oauth2_token_introspect on;` (or the `auth_request` module) for access control, and reference the claim variable from `proxy_set_header` / `add_header` / `log_format`, which evaluate at or after the ACCESS phase.
+
+#### auth_oauth2_token_require
+
+```
+Syntax:  auth_oauth2_token_require $value ... [error=code];
+Default: ---
+Context: http, server, location, limit_except
+```
+
+Performs additional validation in the ACCESS phase after Introspection succeeds with `active: true`. Each `$value` is evaluated and the request is allowed only when **all variables** are non-empty and not equal to `"0"`. The API mirrors `auth_jwt_require`.
+
+Multiple variables may be passed on a single directive (space-separated), and multiple `auth_oauth2_token_require` directives may appear together; all are AND-combined.
+
+**`error=code` parameter**:
+
+- Status code returned on rejection (default `401`)
+- Allowed range: `400-599`, excluding `444` and `499` (same validation as `auth_jwt_require`)
+- Any out-of-range code causes a config error at nginx startup
+
+The module does not attach a `WWW-Authenticate` header or other rejection-response details. Use `error_page` and `add_header` to control the response on the caller side.
+
+**Evaluation timing**:
+
+- After Introspection completes (`active: true` confirmed), before Token Exchange begins
+- When Introspection returns `active: false`, the request is rejected with the existing `401 Unauthorized` (`WWW-Authenticate: Bearer error="invalid_token"`) before the require check runs
+- The check runs on the cache-hit path as well, at the same point in the flow
+
+**Typical use case**: `aud` / `scope` validation for an MCP Resource Server
+
+```nginx
+http {
+    auth_oauth2_token_claim_set $oauth2_aud   aud;
+    auth_oauth2_token_claim_set $oauth2_scope scope;
+
+    map $oauth2_aud $mcp_aud_ok {
+        default 0;
+        "https://mcp.example.com/mcp" 1;
+    }
+    map $oauth2_scope $mcp_has_required_scope {
+        default 0;
+        "~(^|\s)mcp:read(\s|$)" 1;
+    }
+
+    server {
+        location /mcp {
+            auth_oauth2_token_introspect          on;
+            auth_oauth2_token_introspect_endpoint /_introspect;
+
+            auth_oauth2_token_require $mcp_aud_ok;
+            auth_oauth2_token_require $mcp_has_required_scope error=403;
+
+            proxy_pass http://mcp_backend;
+        }
+    }
+}
+```
+
+> **Note**: Do not implement scope checks with `if ($mcp_has_required_scope = 0) { return 403; }`. `if` is evaluated in the REWRITE phase, which runs before Introspection, so `$oauth2_scope` is `not_found`, the `map` falls through to its `default`, and the request is **always rejected** (even for valid tokens). Use `auth_oauth2_token_require` for this kind of check.
 
 ### Token Exchange
 
