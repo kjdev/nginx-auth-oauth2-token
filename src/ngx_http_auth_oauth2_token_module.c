@@ -395,7 +395,6 @@ ngx_http_auth_oauth2_token_create_loc_conf(ngx_conf_t *cf)
 
     conf->introspect = NGX_CONF_UNSET;
     conf->exchange = NGX_CONF_UNSET;
-    conf->require_error = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -430,17 +429,13 @@ ngx_http_auth_oauth2_token_merge_loc_conf(ngx_conf_t *cf,
         conf->exchange_cache = prev->exchange_cache;
     }
 
-    ngx_conf_merge_value(conf->require_error,
-                         prev->require_error,
-                         NGX_HTTP_UNAUTHORIZED);
-
     if (conf->require_values == NULL) {
         conf->require_values = prev->require_values;
     } else if (prev->require_values != NULL
                && prev->require_values->nelts > 0)
     {
         ngx_uint_t i, child_n, parent_n;
-        ngx_http_complex_value_t *values, *parent_values;
+        ngx_http_auth_oauth2_token_require_t *values, *parent_values;
 
         child_n = conf->require_values->nelts;
         parent_n = prev->require_values->nelts;
@@ -1534,8 +1529,10 @@ ngx_http_auth_oauth2_token_variable_claim(ngx_http_request_t *r,
  *
  * Stores complex values for evaluation in the access handler after
  * introspection completes (active=true).  All variables must evaluate to
- * a non-empty value other than "0"; otherwise the configured error code
- * (default 401) is returned.
+ * a non-empty value other than "0"; otherwise the directive-scoped error
+ * code (default 401) is returned.  Each directive carries its own error
+ * code, so multiple directives in the same scope can reject with
+ * independent status codes.
  */
 
 static char *
@@ -1545,12 +1542,14 @@ ngx_http_auth_oauth2_token_conf_set_require(ngx_conf_t *cf,
     ngx_http_auth_oauth2_token_loc_conf_t *lcf = conf;
     ngx_str_t *value;
     ngx_uint_t i, n;
-    ngx_http_complex_value_t *var;
+    ngx_int_t error_code;
+    ngx_http_auth_oauth2_token_require_t *var;
     ngx_http_compile_complex_value_t ccv;
     static const ngx_str_t error_with = ngx_string("error=");
 
     value = cf->args->elts;
     n = cf->args->nelts - 1;
+    error_code = NGX_HTTP_UNAUTHORIZED;
 
     if (value[n].len > error_with.len
         && ngx_strncmp(value[n].data, error_with.data,
@@ -1561,13 +1560,13 @@ ngx_http_auth_oauth2_token_conf_set_require(ngx_conf_t *cf,
         code.data = value[n].data + error_with.len;
         code.len = value[n].len - error_with.len;
 
-        lcf->require_error = ngx_atoi(code.data, code.len);
+        error_code = ngx_atoi(code.data, code.len);
 
-        if (lcf->require_error == NGX_ERROR
-            || lcf->require_error < 400
-            || lcf->require_error > 599
-            || lcf->require_error == 444
-            || lcf->require_error == 499)
+        if (error_code == NGX_ERROR
+            || error_code < 400
+            || error_code > 599
+            || error_code == 444
+            || error_code == 499)
         {
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                "\"%V\" directive error code must be "
@@ -1590,7 +1589,8 @@ ngx_http_auth_oauth2_token_conf_set_require(ngx_conf_t *cf,
 
     if (lcf->require_values == NULL) {
         lcf->require_values = ngx_array_create(
-            cf->pool, 4, sizeof(ngx_http_complex_value_t));
+            cf->pool, 4,
+            sizeof(ngx_http_auth_oauth2_token_require_t));
         if (lcf->require_values == NULL) {
             return NGX_CONF_ERROR;
         }
@@ -1609,11 +1609,14 @@ ngx_http_auth_oauth2_token_conf_set_require(ngx_conf_t *cf,
             return NGX_CONF_ERROR;
         }
 
+        ngx_memzero(var, sizeof(*var));
+        var->error = error_code;
+
         ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
 
         ccv.cf = cf;
         ccv.value = &value[i];
-        ccv.complex_value = var;
+        ccv.complex_value = &var->value;
 
         if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
             return NGX_CONF_ERROR;
@@ -1628,9 +1631,9 @@ ngx_http_auth_oauth2_token_conf_set_require(ngx_conf_t *cf,
  * Evaluate require variables.
  *
  * Returns NGX_OK on success (all variables evaluate to a non-empty,
- * non-"0" value), or the configured error code on the first rejecting
- * variable.  Returns NGX_HTTP_INTERNAL_SERVER_ERROR if the complex
- * value cannot be evaluated at all.
+ * non-"0" value), or the rejecting variable's directive-scoped error
+ * code on the first failure.  Returns NGX_HTTP_INTERNAL_SERVER_ERROR if
+ * the complex value cannot be evaluated at all.
  */
 
 static ngx_int_t
@@ -1638,7 +1641,7 @@ ngx_http_auth_oauth2_token_validate_require(ngx_http_request_t *r,
     ngx_http_auth_oauth2_token_loc_conf_t *lcf)
 {
     ngx_uint_t i;
-    ngx_http_complex_value_t *vars;
+    ngx_http_auth_oauth2_token_require_t *vars;
     ngx_str_t value;
 
     if (lcf->require_values == NULL
@@ -1650,11 +1653,11 @@ ngx_http_auth_oauth2_token_validate_require(ngx_http_request_t *r,
     vars = lcf->require_values->elts;
 
     for (i = 0; i < lcf->require_values->nelts; i++) {
-        if (ngx_http_complex_value(r, &vars[i], &value) != NGX_OK) {
+        if (ngx_http_complex_value(r, &vars[i].value, &value) != NGX_OK) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                           "auth_oauth2_token: "
                           "failed to evaluate require variable \"%V\"",
-                          &vars[i].value);
+                          &vars[i].value.value);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -1664,8 +1667,8 @@ ngx_http_auth_oauth2_token_validate_require(ngx_http_request_t *r,
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                           "auth_oauth2_token: "
                           "rejected by require variable \"%V\"",
-                          &vars[i].value);
-            return lcf->require_error;
+                          &vars[i].value.value);
+            return vars[i].error;
         }
     }
 

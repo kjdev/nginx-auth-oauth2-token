@@ -27,6 +27,12 @@ typedef struct {
 
 
 typedef struct {
+    ngx_http_complex_value_t  value;
+    ngx_int_t                 error;
+} ngx_http_auth_oauth2_token_require_t;
+
+
+typedef struct {
     ngx_flag_t                          introspect;
     ngx_str_t                           introspect_endpoint;
     ngx_auth_oauth2_token_cache_conf_t  introspect_cache;
@@ -37,9 +43,8 @@ typedef struct {
     ngx_str_t                           scope;
     ngx_auth_oauth2_token_cache_conf_t  exchange_cache;
 
-    /* of ngx_http_complex_value_t */
+    /* of ngx_http_auth_oauth2_token_require_t */
     ngx_array_t                        *require_values;
-    ngx_int_t                           require_error;
 } ngx_http_auth_oauth2_token_loc_conf_t;
 
 
