@@ -206,6 +206,7 @@ The module does not attach a `WWW-Authenticate` header or other rejection-respon
 - After Introspection completes (`active: true` confirmed), before Token Exchange begins
 - When Introspection returns `active: false`, the request is rejected with the existing `401 Unauthorized` (`WWW-Authenticate: Bearer error="invalid_token"`) before the require check runs
 - The check runs on the cache-hit path as well, at the same point in the flow
+- The directive is not evaluated unless `auth_oauth2_token_introspect on;` is enabled in the same scope (i.e. Exchange-only mode or both-off mode). Variables produced by `auth_oauth2_token_claim_set` only receive values through Introspection, so evaluating require without Introspection would reject even valid tokens. Always pair this directive with `auth_oauth2_token_introspect on;`
 
 **Typical use case**: `aud` / `scope` validation for an MCP Resource Server
 
