@@ -1,5 +1,15 @@
 # Changelog
 
+## [0a7ceab](../../commit/0a7ceab) - 2026-05-21
+
+### Added
+
+- Add the `auth_oauth2_token_require` directive
+  - Mirrors `auth_jwt_require`: in the ACCESS phase, evaluates one or more variables after Introspection completes with `active: true`, and rejects the request if any variable is empty or `"0"`
+  - Optional `error=code` selects the rejection status code (default `401`); the value must be `400-599`, excluding `444` / `499`
+  - Multiple variables on a single directive and multiple directives in the same scope are AND-combined
+  - Enables the MCP Resource Server pattern (`map`-based `aud` / `scope` checks returning 401 / 403) without the broken `if`-based workaround that runs in the REWRITE phase before introspection populates the variables
+
 ## [c23840d](../../commit/c23840d) - 2026-05-21
 
 ### Added
