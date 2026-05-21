@@ -49,12 +49,18 @@ add_block_preprocessor(sub {
             add_header Content-Type application/json;
             return 200 '{"active":false}';
         }
+
+        location /token/ok {
+            add_header Content-Type application/json;
+            return 200 '{"access_token":"new_exchanged_token_xyz","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","token_type":"Bearer","expires_in":300}';
+        }
     }
 
     server {
         listen $backend_port;
 
         location / {
+            add_header X-Received-Auth \$http_authorization always;
             return 200 "backend OK";
         }
     }
@@ -371,3 +377,28 @@ GET /test
 --- more_headers
 Authorization: Bearer tok_inherit_aud
 --- error_code: 403
+
+
+=== TEST 15: exchange-only mode does not evaluate require
+--- config
+    location = /_token {
+        internal;
+        proxy_pass http://127.0.0.1:1985/token/ok;
+    }
+
+    location /test {
+        auth_oauth2_token_exchange       on;
+        auth_oauth2_token_token_endpoint /_token;
+        auth_oauth2_token_audience       "backend-service";
+
+        auth_oauth2_token_require $mcp_aud_ok error=403;
+
+        proxy_pass http://127.0.0.1:1986/;
+    }
+--- request
+GET /test
+--- more_headers
+Authorization: Bearer tok_exchange_only_require
+--- error_code: 200
+--- response_headers
+X-Received-Auth: Bearer new_exchanged_token_xyz
