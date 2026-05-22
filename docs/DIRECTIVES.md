@@ -15,6 +15,7 @@ Reference for directives and embedded variables provided by `ngx_http_auth_oauth
 | [auth_oauth2_token_introspect_cache](#auth_oauth2_token_introspect_cache) | Introspection cache settings | http, server, location |
 | [auth_oauth2_token_claim_set](#auth_oauth2_token_claim_set) | Bind an arbitrary Introspection response claim to a variable | http |
 | [auth_oauth2_token_require](#auth_oauth2_token_require) | Additional validation after Introspection | http, server, location, limit_except |
+| [auth_oauth2_token_www_authenticate](#auth_oauth2_token_www_authenticate) | Controls the `WWW-Authenticate` header emitted on 401 | http, server, location |
 | [auth_oauth2_token_exchange](#auth_oauth2_token_exchange) | Enable/disable Exchange | http, server, location |
 | [auth_oauth2_token_token_endpoint](#auth_oauth2_token_token_endpoint) | Token endpoint URI | http, server, location |
 | [auth_oauth2_token_audience](#auth_oauth2_token_audience) | Exchange target audience | http, server, location |
@@ -240,6 +241,59 @@ http {
 ```
 
 > **Note**: Do not implement scope checks with `if ($mcp_has_required_scope = 0) { return 403; }`. `if` is evaluated in the REWRITE phase, which runs before Introspection, so `$oauth2_scope` is `not_found`, the `map` falls through to its `default`, and the request is **always rejected** (even for valid tokens). Use `auth_oauth2_token_require` for this kind of check.
+
+#### auth_oauth2_token_www_authenticate
+
+```
+Syntax:  auth_oauth2_token_www_authenticate on | off | string;
+Default: on
+Context: http, server, location
+```
+
+Controls the `WWW-Authenticate` header emitted by the module on `401 Unauthorized` responses. Symmetric API to `auth_jwt_www_authenticate`.
+
+| Value | Behavior |
+|---|---|
+| `on` (default) | Emit `WWW-Authenticate: Bearer error="invalid_token"` |
+| `off` | Do not emit `WWW-Authenticate` from the module (allows full override via `error_page` + `add_header`) |
+| `string` | Emit the given value. `$variable` references are expanded at request time |
+
+**Use case**: MCP Resource Server deployments ([MCP Authorization 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/authorization) + [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)) need to return a single `WWW-Authenticate: Bearer resource_metadata="..."` challenge. With the default behavior, the module-emitted header and any header added via `error_page 401 = @unauth;` + `add_header` are coalesced into one physical header (comma-joined), and some clients may then fail to extract `resource_metadata`.
+
+**Example 1**: Suppress in the module and let `error_page` emit the single header
+
+```nginx
+location /mcp {
+    auth_oauth2_token_introspect          on;
+    auth_oauth2_token_introspect_endpoint /_introspect;
+    auth_oauth2_token_www_authenticate    off;
+
+    error_page 401 = @mcp_unauthorized;
+
+    proxy_pass http://mcp_backend;
+}
+
+location @mcp_unauthorized {
+    internal;
+    add_header WWW-Authenticate
+        'Bearer resource_metadata="https://rs.example.com/.well-known/oauth-protected-resource", scope="mcp:read"'
+        always;
+    return 401;
+}
+```
+
+**Example 2**: Have the module build the MCP-style challenge directly
+
+```nginx
+location /mcp {
+    auth_oauth2_token_introspect          on;
+    auth_oauth2_token_introspect_endpoint /_introspect;
+    auth_oauth2_token_www_authenticate
+        'Bearer resource_metadata="https://$host/.well-known/oauth-protected-resource", scope="mcp:read"';
+
+    proxy_pass http://mcp_backend;
+}
+```
 
 ### Token Exchange
 
