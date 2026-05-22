@@ -1,5 +1,13 @@
 # Changelog
 
+## [3af2161](../../commit/3af2161) - 2026-05-22
+
+### Added
+
+- Add the `auth_oauth2_token_www_authenticate` directive
+  - Mirrors `auth_jwt_www_authenticate` from nginx-auth-jwt: `on` (default) keeps the existing `Bearer error="invalid_token"` challenge, `off` suppresses the module-emitted header entirely, and a string value substitutes the challenge with arbitrary text (supports `$variable` expansion)
+  - Lets MCP Resource Server deployments return a standalone `WWW-Authenticate: Bearer resource_metadata="..."` challenge ([MCP Authorization 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/authorization) + [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)); previously the module-emitted value and an `error_page`-driven `add_header` were coalesced into one physical header, causing some clients to drop `resource_metadata`
+
 ## [0e5ef93](../../commit/0e5ef93) - 2026-05-21
 
 ### Fixed
