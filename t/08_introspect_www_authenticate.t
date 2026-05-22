@@ -265,3 +265,74 @@ Authorization: Bearer invalid_token
 --- error_code: 401
 --- response_headers
 WWW-Authenticate: Bearer realm="api"
+
+
+=== TEST 9: custom string expanding to empty suppresses WWW-Authenticate
+--- config
+    location = /_introspect {
+        internal;
+        proxy_pass http://127.0.0.1:1985/introspect/inactive;
+    }
+
+    location /test {
+        set $challenge                        '';
+        auth_oauth2_token_introspect          on;
+        auth_oauth2_token_introspect_endpoint /_introspect;
+        auth_oauth2_token_www_authenticate    $challenge;
+
+        proxy_pass http://127.0.0.1:1986/;
+    }
+--- request
+GET /test
+--- more_headers
+Authorization: Bearer invalid_token
+--- error_code: 401
+--- response_headers
+!WWW-Authenticate
+
+
+=== TEST 10: map-driven empty expansion suppresses, non-empty emits
+--- http_config
+    auth_oauth2_token_client_id     "test-client";
+    auth_oauth2_token_client_secret "test-secret";
+
+    map $arg_mode $challenge {
+        default      '';
+        mcp          'Bearer realm="mcp"';
+    }
+
+    server {
+        listen 1985;
+
+        location /introspect/inactive {
+            add_header Content-Type application/json;
+            return 200 '{"active":false}';
+        }
+    }
+
+    server {
+        listen 1986;
+
+        location / {
+            return 200 "backend OK";
+        }
+    }
+--- config
+    location = /_introspect {
+        internal;
+        proxy_pass http://127.0.0.1:1985/introspect/inactive;
+    }
+
+    location /test {
+        auth_oauth2_token_introspect          on;
+        auth_oauth2_token_introspect_endpoint /_introspect;
+        auth_oauth2_token_www_authenticate    $challenge;
+
+        proxy_pass http://127.0.0.1:1986/;
+    }
+--- pipelined_requests eval
+["GET /test", "GET /test?mode=mcp"]
+--- error_code eval
+[401, 401]
+--- response_headers eval
+["!WWW-Authenticate", qq{WWW-Authenticate: Bearer realm=\"mcp\"}]
