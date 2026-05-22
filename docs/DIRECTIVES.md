@@ -258,6 +258,8 @@ Controls the `WWW-Authenticate` header emitted by the module on `401 Unauthorize
 | `off` | Do not emit `WWW-Authenticate` from the module (allows full override via `error_page` + `add_header`) |
 | `string` | Emit the given value. `$variable` references are expanded at request time |
 
+When the `string` form contains `$variable` references and the expansion yields an empty string for a given request, the module does not emit `WWW-Authenticate` for that request (equivalent to `off`). This allows per-request switching of the challenge via `map`/`set`, or selective suppression. Same behavior as the sibling `auth_jwt_www_authenticate`.
+
 **Use case**: MCP Resource Server deployments ([MCP Authorization 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/authorization) + [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)) need to return a single `WWW-Authenticate: Bearer resource_metadata="..."` challenge. With the default behavior, the module-emitted header and any header added via `error_page 401 = @unauth;` + `add_header` are coalesced into one physical header (comma-joined), and some clients may then fail to extract `resource_metadata`.
 
 **Example 1**: Suppress in the module and let `error_page` emit the single header
