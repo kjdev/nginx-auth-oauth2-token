@@ -48,6 +48,9 @@ static char *ngx_http_auth_oauth2_token_conf_set_claim(
 static char *ngx_http_auth_oauth2_token_conf_set_require(
     ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
+static char *ngx_http_auth_oauth2_token_conf_set_www_authenticate(
+    ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
 static ngx_int_t ngx_http_auth_oauth2_token_validate_require(
     ngx_http_request_t *r,
     ngx_http_auth_oauth2_token_loc_conf_t *lcf);
@@ -190,6 +193,14 @@ static ngx_command_t ngx_http_auth_oauth2_token_commands[] = {
       NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF
       | NGX_HTTP_LMT_CONF | NGX_CONF_1MORE,
       ngx_http_auth_oauth2_token_conf_set_require,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      0,
+      NULL },
+
+    { ngx_string("auth_oauth2_token_www_authenticate"),
+      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF
+      | NGX_CONF_TAKE1,
+      ngx_http_auth_oauth2_token_conf_set_www_authenticate,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
@@ -395,6 +406,8 @@ ngx_http_auth_oauth2_token_create_loc_conf(ngx_conf_t *cf)
 
     conf->introspect = NGX_CONF_UNSET;
     conf->exchange = NGX_CONF_UNSET;
+    conf->www_authenticate = NGX_CONF_UNSET_PTR;
+    conf->www_authenticate_off = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -428,6 +441,11 @@ ngx_http_auth_oauth2_token_merge_loc_conf(ngx_conf_t *cf,
     if (conf->exchange_cache.zone == NULL) {
         conf->exchange_cache = prev->exchange_cache;
     }
+
+    ngx_conf_merge_value(conf->www_authenticate_off,
+                         prev->www_authenticate_off, 0);
+    ngx_conf_merge_ptr_value(conf->www_authenticate,
+                             prev->www_authenticate, NULL);
 
     if (conf->require_values == NULL) {
         conf->require_values = prev->require_values;
@@ -868,7 +886,32 @@ exchange:
 static ngx_int_t
 ngx_http_auth_oauth2_token_unauthorized(ngx_http_request_t *r)
 {
+    ngx_http_auth_oauth2_token_loc_conf_t *lcf;
     ngx_table_elt_t *h;
+    ngx_str_t value;
+
+    lcf = ngx_http_get_module_loc_conf(r,
+                                       ngx_http_auth_oauth2_token_module);
+
+    if (lcf->www_authenticate_off) {
+        return NGX_HTTP_UNAUTHORIZED;
+    }
+
+    if (lcf->www_authenticate != NULL) {
+        if (ngx_http_complex_value(r, lcf->www_authenticate,
+                                   &value)
+            != NGX_OK)
+        {
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
+        if (value.len == 0) {
+            return NGX_HTTP_UNAUTHORIZED;
+        }
+
+    } else {
+        ngx_str_set(&value, "Bearer error=\"invalid_token\"");
+    }
 
     r->headers_out.www_authenticate = ngx_list_push(
         &r->headers_out.headers);
@@ -880,8 +923,7 @@ ngx_http_auth_oauth2_token_unauthorized(ngx_http_request_t *r)
 
     h->hash = 1;
     ngx_str_set(&h->key, "WWW-Authenticate");
-    ngx_str_set(&h->value,
-                "Bearer error=\"invalid_token\"");
+    h->value = value;
 
     return NGX_HTTP_UNAUTHORIZED;
 }
@@ -1673,4 +1715,67 @@ ngx_http_auth_oauth2_token_validate_require(ngx_http_request_t *r,
     }
 
     return NGX_OK;
+}
+
+
+/*
+ * Parse: auth_oauth2_token_www_authenticate on | off | <string>;
+ *
+ *   on          - emit the default 'Bearer error="invalid_token"' challenge
+ *   off         - suppress the WWW-Authenticate header entirely
+ *   <string>    - emit the given value (variables allowed)
+ */
+
+static char *
+ngx_http_auth_oauth2_token_conf_set_www_authenticate(
+    ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_auth_oauth2_token_loc_conf_t *lcf = conf;
+    ngx_str_t *value;
+    ngx_http_compile_complex_value_t ccv;
+    ngx_http_complex_value_t *cv;
+
+    if (lcf->www_authenticate != NGX_CONF_UNSET_PTR
+        || lcf->www_authenticate_off != NGX_CONF_UNSET)
+    {
+        return "is duplicate";
+    }
+
+    value = cf->args->elts;
+
+    if (value[1].len == 3
+        && ngx_strncmp(value[1].data, "off", 3) == 0)
+    {
+        lcf->www_authenticate_off = 1;
+        lcf->www_authenticate = NULL;
+        return NGX_CONF_OK;
+    }
+
+    if (value[1].len == 2
+        && ngx_strncmp(value[1].data, "on", 2) == 0)
+    {
+        lcf->www_authenticate_off = 0;
+        lcf->www_authenticate = NULL;
+        return NGX_CONF_OK;
+    }
+
+    cv = ngx_palloc(cf->pool, sizeof(ngx_http_complex_value_t));
+    if (cv == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
+
+    ccv.cf = cf;
+    ccv.value = &value[1];
+    ccv.complex_value = cv;
+
+    if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
+
+    lcf->www_authenticate = cv;
+    lcf->www_authenticate_off = 0;
+
+    return NGX_CONF_OK;
 }

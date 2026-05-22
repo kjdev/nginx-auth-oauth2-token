@@ -45,6 +45,9 @@ typedef struct {
 
     /* of ngx_http_auth_oauth2_token_require_t */
     ngx_array_t                        *require_values;
+
+    ngx_http_complex_value_t           *www_authenticate;
+    ngx_flag_t                          www_authenticate_off;
 } ngx_http_auth_oauth2_token_loc_conf_t;
 
 
