@@ -1,5 +1,16 @@
 # Changelog
 
+## [f5e8ff0](../../commit/f5e8ff0) - 2026-06-03
+
+### Changed
+
+- Bump the `nxe-json` submodule from 0.2.0 to 0.5.0
+  - Backward-compatible additions only; no existing `nxe_json_*` call sites required changes (build and full test suite pass unchanged)
+  - 0.3.0: object iteration API (`nxe_json_object_size`, `nxe_json_object_iter*`)
+  - 0.4.0: `nxe_json_stringify_compact_sorted`, a key-sorted variant of the compact serializer for canonical output
+  - 0.4.1: `nxe_json_stringify_*` output is now NUL-terminated (`data[len] == '\0'`); `len` semantics are preserved, so length-based consumers are unaffected
+  - 0.5.0: scalar constructors and deep copy (`nxe_json_deep_copy`, `nxe_json_from_integer`, `nxe_json_from_boolean`, `nxe_json_null`)
+
 ## [3af2161](../../commit/3af2161) - 2026-05-22
 
 ### Added
