@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add the `auth_oauth2_token_phase` directive
+  - Mirrors `auth_jwt_phase` from nginx-auth-jwt: lets `preaccess | access` select the module's execution phase (default `access`, compatible with existing behavior)
+  - Lets a PREACCESS-fixed module such as `ngx_http_ratelimit_module` key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`)
+  - When selecting `preaccess`, `load_module` order matters (the PREACCESS phase skips remaining handlers once one returns `NGX_OK`); see `docs/DIRECTIVES.md` for details
+
 ## [0.4.1] - 2026-06-03
 
 ### Changed
