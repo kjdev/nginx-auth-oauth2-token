@@ -7,6 +7,7 @@ Reference for directives and embedded variables provided by `ngx_http_auth_oauth
 
 | Directive | Description | Context |
 |---|---|---|
+| [auth_oauth2_token_phase](#auth_oauth2_token_phase) | Module's execution phase | http, server, location |
 | [auth_oauth2_token_client_id](#auth_oauth2_token_client_id) | Client ID | http |
 | [auth_oauth2_token_client_secret](#auth_oauth2_token_client_secret) | Client secret | http |
 | [auth_oauth2_token_client_secret_file](#auth_oauth2_token_client_secret_file) | Client secret file path | http |
@@ -22,6 +23,25 @@ Reference for directives and embedded variables provided by `ngx_http_auth_oauth
 | [auth_oauth2_token_scope](#auth_oauth2_token_scope) | Exchange requested scope | http, server, location |
 | [auth_oauth2_token_exchange_cache](#auth_oauth2_token_exchange_cache) | Exchange cache settings | http, server, location |
 
+
+### Execution Phase
+
+Controls which nginx phase the module runs in.
+
+#### auth_oauth2_token_phase
+
+```
+Syntax:  auth_oauth2_token_phase preaccess | access;
+Default: access
+Context: http, server, location
+```
+
+Specifies the phase in which the module's handler runs.
+
+- `access` (default): runs in `NGX_HTTP_ACCESS_PHASE`. Compatible with the existing behavior.
+- `preaccess`: runs in `NGX_HTTP_PREACCESS_PHASE`. Use this when a PREACCESS-fixed module such as `ngx_http_ratelimit_module` needs to key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`).
+
+When using `preaccess`, be careful about `load_module` order. The PREACCESS phase's generic phase engine skips the remaining handlers in the same phase once one handler returns `NGX_OK`, so a PREACCESS-phase module loaded after this one (e.g. `limit_req`/`limit_conn`) may not run on successful authentication. Load any PREACCESS-phase module that keys on claim variables such as `$oauth2_token_sub` before this module (i.e. earlier in `load_module` order).
 
 ### Client Authentication
 
