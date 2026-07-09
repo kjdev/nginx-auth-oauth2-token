@@ -33,6 +33,8 @@ typedef struct {
 
 
 typedef struct {
+    ngx_int_t                           phase;
+
     ngx_flag_t                          introspect;
     ngx_str_t                           introspect_endpoint;
     ngx_auth_oauth2_token_cache_conf_t  introspect_cache;

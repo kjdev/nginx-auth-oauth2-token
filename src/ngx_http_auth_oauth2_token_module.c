@@ -28,6 +28,10 @@ static char *ngx_http_auth_oauth2_token_merge_loc_conf(
     ngx_conf_t *cf, void *parent, void *child);
 
 static ngx_int_t ngx_http_auth_oauth2_token_handler(
+    ngx_http_request_t *r, ngx_int_t phase);
+static ngx_int_t ngx_http_auth_oauth2_token_preaccess_handler(
+    ngx_http_request_t *r);
+static ngx_int_t ngx_http_auth_oauth2_token_access_handler(
     ngx_http_request_t *r);
 
 static ngx_int_t ngx_http_auth_oauth2_token_unauthorized(
@@ -85,7 +89,23 @@ ngx_http_auth_oauth2_token_variable_new_token_type(
     uintptr_t data);
 
 
+static ngx_conf_enum_t ngx_http_auth_oauth2_token_phases[] = {
+    { ngx_string("PREACCESS"), NGX_HTTP_PREACCESS_PHASE },
+    { ngx_string("ACCESS"), NGX_HTTP_ACCESS_PHASE },
+    { ngx_null_string, 0 }
+};
+
+
 static ngx_command_t ngx_http_auth_oauth2_token_commands[] = {
+
+    { ngx_string("auth_oauth2_token_phase"),
+      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF
+      | NGX_CONF_TAKE1,
+      ngx_conf_set_enum_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_auth_oauth2_token_loc_conf_t,
+               phase),
+      &ngx_http_auth_oauth2_token_phases },
 
     { ngx_string("auth_oauth2_token_client_id"),
       NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE1,
@@ -307,12 +327,20 @@ ngx_http_auth_oauth2_token_post_conf(ngx_conf_t *cf)
                                               ngx_http_core_module);
 
     h = ngx_array_push(
+        &cmcf->phases[NGX_HTTP_PREACCESS_PHASE].handlers);
+    if (h == NULL) {
+        return NGX_ERROR;
+    }
+
+    *h = ngx_http_auth_oauth2_token_preaccess_handler;
+
+    h = ngx_array_push(
         &cmcf->phases[NGX_HTTP_ACCESS_PHASE].handlers);
     if (h == NULL) {
         return NGX_ERROR;
     }
 
-    *h = ngx_http_auth_oauth2_token_handler;
+    *h = ngx_http_auth_oauth2_token_access_handler;
 
     return NGX_OK;
 }
@@ -404,6 +432,7 @@ ngx_http_auth_oauth2_token_create_loc_conf(ngx_conf_t *cf)
         return NULL;
     }
 
+    conf->phase = NGX_CONF_UNSET;
     conf->introspect = NGX_CONF_UNSET;
     conf->exchange = NGX_CONF_UNSET;
     conf->www_authenticate = NGX_CONF_UNSET_PTR;
@@ -419,6 +448,9 @@ ngx_http_auth_oauth2_token_merge_loc_conf(ngx_conf_t *cf,
 {
     ngx_http_auth_oauth2_token_loc_conf_t *prev = parent;
     ngx_http_auth_oauth2_token_loc_conf_t *conf = child;
+
+    ngx_conf_merge_value(conf->phase,
+                         prev->phase, NGX_HTTP_ACCESS_PHASE);
 
     ngx_conf_merge_value(conf->introspect,
                          prev->introspect, 0);
@@ -497,7 +529,24 @@ ngx_http_auth_oauth2_token_merge_loc_conf(ngx_conf_t *cf,
 
 
 static ngx_int_t
-ngx_http_auth_oauth2_token_handler(ngx_http_request_t *r)
+ngx_http_auth_oauth2_token_preaccess_handler(ngx_http_request_t *r)
+{
+    return ngx_http_auth_oauth2_token_handler(r,
+                                              NGX_HTTP_PREACCESS_PHASE);
+}
+
+
+static ngx_int_t
+ngx_http_auth_oauth2_token_access_handler(ngx_http_request_t *r)
+{
+    return ngx_http_auth_oauth2_token_handler(r,
+                                              NGX_HTTP_ACCESS_PHASE);
+}
+
+
+static ngx_int_t
+ngx_http_auth_oauth2_token_handler(ngx_http_request_t *r,
+    ngx_int_t phase)
 {
     ngx_http_auth_oauth2_token_loc_conf_t *lcf;
     ngx_http_auth_oauth2_token_main_conf_t *mcf;
@@ -518,6 +567,14 @@ ngx_http_auth_oauth2_token_handler(ngx_http_request_t *r)
 
     /* skip if module is not enabled */
     if (!lcf->introspect && !lcf->exchange) {
+        return NGX_DECLINED;
+    }
+
+    if (lcf->phase != phase) {
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "auth_oauth2_token: ignore phase: %s",
+                       (u_char *) (phase == NGX_HTTP_PREACCESS_PHASE
+                                   ? "PREACCESS" : "ACCESS"));
         return NGX_DECLINED;
     }
 
