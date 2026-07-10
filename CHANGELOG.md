@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Add the `auth_oauth2_token_phase` directive
   - Mirrors `auth_jwt_phase` from nginx-auth-jwt: lets `preaccess | access` select the module's execution phase (default `access`, compatible with existing behavior)
-  - Lets a PREACCESS-fixed module such as `ngx_http_ratelimit_module` key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`)
-  - When selecting `preaccess`, `load_module` order matters (the PREACCESS phase skips remaining handlers once one returns `NGX_OK`); see `docs/DIRECTIVES.md` for details
+  - Lets a PREACCESS-fixed module such as `ngx_http_limit_req_module` key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`)
+  - With `preaccess`, this module returns `NGX_DECLINED` (not `NGX_OK`) on successful authentication and hands off to the remaining PREACCESS-phase handlers (e.g. `limit_req`/`limit_conn`), so the claim variable is available regardless of `load_module` order. Note that nginx core's `auth_delay` is only wired into the ACCESS phase and does not apply in `preaccess`; see `docs/DIRECTIVES.md` for details
 
 ## [0.4.1] - 2026-06-03
 
