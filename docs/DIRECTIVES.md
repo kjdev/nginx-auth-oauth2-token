@@ -39,9 +39,12 @@ Context: http, server, location
 Specifies the phase in which the module's handler runs.
 
 - `access` (default): runs in `NGX_HTTP_ACCESS_PHASE`. Compatible with the existing behavior.
-- `preaccess`: runs in `NGX_HTTP_PREACCESS_PHASE`. Use this when a PREACCESS-fixed module such as `ngx_http_ratelimit_module` needs to key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`).
+- `preaccess`: runs in `NGX_HTTP_PREACCESS_PHASE`. Use this when a PREACCESS-fixed module such as `ngx_http_limit_req_module` needs to key on a claim variable resolved by this module (e.g. `$oauth2_token_sub`).
 
-When using `preaccess`, be careful about `load_module` order. The PREACCESS phase's generic phase engine skips the remaining handlers in the same phase once one handler returns `NGX_OK`, so a PREACCESS-phase module loaded after this one (e.g. `limit_req`/`limit_conn`) may not run on successful authentication. Load any PREACCESS-phase module that keys on claim variables such as `$oauth2_token_sub` before this module (i.e. earlier in `load_module` order).
+With `preaccess`, this module returns `NGX_DECLINED` instead of `NGX_OK` on successful authentication, so it hands off to the remaining handlers in the same phase (e.g. `limit_req`/`limit_conn`). Later PREACCESS-phase modules can therefore read the claim variables this module resolved regardless of `load_module` order.
+
+> [!NOTE]
+> nginx core's `auth_delay` (the response delay on authentication failure) is only wired into the ACCESS phase, so it does not apply to the 401 responses this module returns while running in `preaccess`. Use `access` (the default) if you rely on `auth_delay` for brute-force protection.
 
 ### Client Authentication
 
