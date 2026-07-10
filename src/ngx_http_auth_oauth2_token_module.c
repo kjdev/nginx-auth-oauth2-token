@@ -936,6 +936,15 @@ exchange:
         }
     }
 
+    /*
+     * PREACCESS: NGX_OK would make the generic phase checker skip the
+     * phase's remaining handlers (e.g. limit_req keyed on a claim this
+     * module just resolved). Decline instead so they still run.
+     */
+    if (phase == NGX_HTTP_PREACCESS_PHASE) {
+        return NGX_DECLINED;
+    }
+
     return NGX_OK;
 }
 
