@@ -7,6 +7,8 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+#include <nxe_phase.h>
+
 #include "ngx_http_auth_oauth2_token_module.h"
 #include "ngx_auth_oauth2_token_introspect.h"
 #include "ngx_auth_oauth2_token_exchange.h"
@@ -320,27 +322,21 @@ ngx_http_auth_oauth2_token_pre_conf(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_auth_oauth2_token_post_conf(ngx_conf_t *cf)
 {
-    ngx_http_handler_pt *h;
-    ngx_http_core_main_conf_t *cmcf;
-
-    cmcf = ngx_http_conf_get_module_main_conf(cf,
-                                              ngx_http_core_module);
-
-    h = ngx_array_push(
-        &cmcf->phases[NGX_HTTP_PREACCESS_PHASE].handlers);
-    if (h == NULL) {
+    if (nxe_phase_add_handler(cf, NGX_HTTP_PREACCESS_PHASE,
+                              NXE_PHASE_PRIO_OAUTH2_TOKEN,
+                              ngx_http_auth_oauth2_token_preaccess_handler,
+                              "auth_oauth2_token") != NGX_OK)
+    {
         return NGX_ERROR;
     }
 
-    *h = ngx_http_auth_oauth2_token_preaccess_handler;
-
-    h = ngx_array_push(
-        &cmcf->phases[NGX_HTTP_ACCESS_PHASE].handlers);
-    if (h == NULL) {
+    if (nxe_phase_add_handler(cf, NGX_HTTP_ACCESS_PHASE,
+                              NXE_PHASE_PRIO_OAUTH2_TOKEN,
+                              ngx_http_auth_oauth2_token_access_handler,
+                              "auth_oauth2_token") != NGX_OK)
+    {
         return NGX_ERROR;
     }
-
-    *h = ngx_http_auth_oauth2_token_access_handler;
 
     return NGX_OK;
 }

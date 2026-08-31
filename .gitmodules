@@ -1,3 +1,6 @@
 [submodule "nxe-json"]
 	path = nxe-json
 	url = https://github.com/kjdev/nxe-json.git
+[submodule "nxe-phase"]
+	path = nxe-phase
+	url = https://github.com/kjdev/nxe-phase.git
