@@ -5,6 +5,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-02
+
 ### Dependencies
 
 - Add the `nxe-phase` submodule and register the PREACCESS/ACCESS phase handlers through `nxe_phase_add_handler()` (priority `NXE_PHASE_PRIO_OAUTH2_TOKEN` = 250) instead of a direct `ngx_array_push()`. nginx's `ngx_http_init_phase_handlers()` walks each phase's handler array tail-to-head, so the previous direct push made this module's execution order relative to other same-phase modules (e.g. auth-jwt, auth-apikey) depend on `--add-module` / `load_module` order rather than on `nginx.conf`. With `nxe-phase`, the order is fixed by the shared priority band regardless of build/load order.
